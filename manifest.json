@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "NewsBreak Verified Filter",
+  "version": "1.0.0",
+  "description": "Hide posts from verified publishers on NewsBreak, leaving ads and other items visible.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.newsbreak.com/*",
+        "https://newsbreak.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "NewsBreak Verified Filter"
+  }
+}
+
+
