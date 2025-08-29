@@ -340,55 +340,61 @@
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   }
-  async function exportAdsCsv() {
+  function downloadAdsCSV() {
     const roots = [document];
-  
-    // Include same-origin iframes (cross-origin will be skipped automatically)
     document.querySelectorAll('iframe').forEach((iframe) => {
       try {
         const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        if (doc && doc.location && typeof doc.location.href === 'string') roots.push(doc);
+        if (doc) roots.push(doc);
       } catch (_) {}
     });
   
-    // Collect rows
     const rows = [];
     roots.forEach((root) => {
       root.querySelectorAll('.ad-card-container').forEach((ad) => {
         const headline = ad.querySelector('.ad-headline')?.innerText?.trim() || '';
-        const link = (ad.querySelector('a.mspai-click-through')?.href
-                   || ad.closest('a.mspai-click-through')?.href
-                   || ad.querySelector('a[href]')?.href
-                   || ad.closest('a[href]')?.href
-                   || '') || '';
-        const img = ad.querySelector('.ad-foreground')?.src
-                 || ad.querySelector('.ad-image-container img')?.src
-                 || '';
-        if (headline || link || img) rows.push({ headline, link, img });
+        const anchor = ad.closest('a.mspai-click-through');
+        const link = anchor?.href || '';
+        const img = ad.querySelector('.ad-foreground')?.src || '';
+        if (headline || link || img) {
+          rows.push({ headline, link, img });
+        }
       });
     });
   
-    // CSV
-    const esc = (s) => String(s ?? '').replace(/"/g, '""').replace(/\r?\n|\r/g, ' ');
-    const csv = ['Headline,Link,Image']
-      .concat(rows.map(r => `"${esc(r.headline)}","${esc(r.link)}","${esc(r.img)}"`))
-      .join('\n');
+    // Resolve final URLs via background
+    const resolvePromises = rows.map((r) => new Promise((resolve) => {
+      if (!r.link || !chrome.runtime.sendMessage) return resolve({ ...r, destination: r.link });
+      chrome.runtime.sendMessage({ type: 'RESOLVE_URL', url: r.link }, (resp) => {
+        resolve({ ...r, destination: (resp?.ok && resp.url) || r.link });
+      });
+    }));
   
-    // Download
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ad_data_${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    Promise.all(resolvePromises).then((finalRows) => {
+      const esc = (s) => `"${String(s ?? '').replace(/"/g, '""').replace(/\r?\n|\r/g, ' ')}"`;
+      const csv = ['Headline,Image,Destination']
+        .concat(finalRows.map(r => `${esc(r.headline)},${esc(r.img)},${esc(r.destination)}`))
+        .join('\n');
+  
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ad_data_${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
   }
+  
+
+
+
+
   // exportAdsCsv(); // Disabled auto-run; use the Export button to trigger manually
 
   // Expose for outer init call
   window.injectExportButton = injectExportButton;
 })();
-
 

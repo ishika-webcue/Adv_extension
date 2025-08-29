@@ -1,31 +1,36 @@
-// Resolve the final destination of a URL by following redirects (CORS-permitted)
-// Falls back to the original URL if network errors or cross-origin issues occur
-self.addEventListener('message', () => {});
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message && message.type === 'RESOLVE_URL' && typeof message.url === 'string') {
+  if (message?.type === 'RESOLVE_URL' && typeof message.url === 'string') {
     (async () => {
       try {
-        // HEAD minimizes payload; some servers may block, so fallback to GET without reading body
         let finalUrl = message.url;
+
         try {
-          const headResp = await fetch(message.url, { method: 'HEAD', redirect: 'follow', mode: 'no-cors' });
-          // In no-cors, we can't read much, but the request still follows redirects; URL might not reflect final
-          // Try a regular GET without consuming body to extract final URL; rely on the Response.url property
-          const getResp = await fetch(message.url, { method: 'GET', redirect: 'follow' });
-          finalUrl = getResp.url || finalUrl;
-        } catch (_) {
-          // Ignore and keep original
+          // Use a free CORS proxy
+          const proxyUrl = 'https://api.allorigins.win/get?url=' + encodeURIComponent(message.url);
+          const resp = await fetch(proxyUrl);
+          if (resp.ok) {
+            const data = await resp.json();
+            // Extract final URL from the content if possible
+            // For redirects, some servers include the canonical <link> or <meta>
+            // Otherwise, fallback to original URL
+            const docText = data.contents || '';
+            const urlMatch = docText.match(/<link rel="canonical" href="([^"]+)"/i);
+            if (urlMatch && urlMatch[1]) {
+              finalUrl = urlMatch[1];
+            } else {
+              finalUrl = message.url;
+            }
+          }
+        } catch (err) {
+          // If proxy fails, fallback
+          finalUrl = message.url;
         }
+
         sendResponse({ ok: true, url: finalUrl });
       } catch (err) {
         sendResponse({ ok: false, url: message.url, error: String(err) });
       }
     })();
-    return true; // Keep message channel open for async sendResponse
+    return true; // keep channel open for async
   }
 });
-
-
-
-

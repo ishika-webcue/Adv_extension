@@ -18,6 +18,7 @@
         "https://www.newsbreak.com/*",
         "https://newsbreak.com/*"
       ],
+      "all_frames": true,
       "js": ["content.js"],
       "run_at": "document_idle"
     }
